@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { Mic2, Music2, Music4, Sparkles, WandSparkles } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatedSection } from '@/components/AnimatedSection'
 import { Seo } from '@/components/Seo'
@@ -45,11 +45,18 @@ function formatTime(seconds) {
   return `${mins}:${secs.toString().padStart(2, '0')}`
 }
 
-function CustomAudioPlayer({ title, src }) {
+function CustomAudioPlayer({ title, src, exclusiveId, audioGroup }) {
   const audioRef = useRef(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
+
+  const setAudioRef = (el) => {
+    audioRef.current = el
+    if (exclusiveId && audioGroup) {
+      audioGroup.register(exclusiveId, el)
+    }
+  }
 
   const togglePlayback = async () => {
     const audio = audioRef.current
@@ -61,9 +68,10 @@ function CustomAudioPlayer({ title, src }) {
       return
     }
 
+    audioGroup?.pauseOthers(exclusiveId)
+
     try {
       await audio.play()
-      setIsPlaying(true)
     } catch {
       setIsPlaying(false)
     }
@@ -84,10 +92,12 @@ function CustomAudioPlayer({ title, src }) {
       </CardHeader>
       <CardContent className="space-y-3">
         <audio
-          ref={audioRef}
+          ref={setAudioRef}
           src={src}
           onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
           onLoadedMetadata={(event) => setDuration(event.currentTarget.duration || 0)}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
           onEnded={() => setIsPlaying(false)}
         />
         <div className="flex items-center gap-3">
@@ -112,6 +122,39 @@ function CustomAudioPlayer({ title, src }) {
         />
       </CardContent>
     </Card>
+  )
+}
+
+function HearTheMagicPlayers() {
+  const registry = useRef(new Map())
+
+  const audioGroup = useMemo(
+    () => ({
+      register(id, el) {
+        if (el) registry.current.set(id, el)
+        else registry.current.delete(id)
+      },
+      pauseOthers(exceptId) {
+        registry.current.forEach((audio, id) => {
+          if (id !== exceptId && audio && !audio.paused) audio.pause()
+        })
+      },
+    }),
+    [],
+  )
+
+  return (
+    <>
+      {audioSamples.map((sample) => (
+        <CustomAudioPlayer
+          key={sample.title}
+          title={sample.title}
+          src={sample.src}
+          exclusiveId={sample.title}
+          audioGroup={audioGroup}
+        />
+      ))}
+    </>
   )
 }
 
@@ -240,9 +283,7 @@ export function HomePage() {
       <AnimatedSection className="container pb-16">
         <h2 className="mb-6 text-3xl md:text-4xl">Hear the Magic</h2>
         <div className="grid gap-5 md:grid-cols-3">
-          {audioSamples.map((sample) => (
-            <CustomAudioPlayer key={sample.title} title={sample.title} src={sample.src} />
-          ))}
+          <HearTheMagicPlayers />
         </div>
       </AnimatedSection>
 
